@@ -8,8 +8,10 @@
  * @module
  */
 
+import type * as customDomains from "../customDomains.js";
 import type * as http from "../http.js";
 import type * as sites from "../sites.js";
+import type * as vercelDomains from "../vercelDomains.js";
 
 import type {
   ApiFromModules,
@@ -18,8 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  customDomains: typeof customDomains;
   http: typeof http;
   sites: typeof sites;
+  vercelDomains: typeof vercelDomains;
 }>;
 
 /**

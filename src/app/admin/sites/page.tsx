@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 
 type Site = NonNullable<ReturnType<typeof useQuery<typeof api.sites.list>>>[number];
@@ -18,6 +18,10 @@ type SiteFormState = {
   faviconUrl?: string | null;
 };
 
+type CustomDomain = NonNullable<
+  ReturnType<typeof useQuery<typeof api.customDomains.listForSite>>
+>[number];
+
 const EMPTY_FORM: SiteFormState = {
   name: "",
   subdomain: "",
@@ -30,10 +34,28 @@ const EMPTY_FORM: SiteFormState = {
 export default function SiteManagerPage() {
   const sites = useQuery(api.sites.list) ?? [];
 
+  const [selectedSiteId, setSelectedSiteId] = useState<string | undefined>(
+    undefined
+  );
+
+  const customDomains: CustomDomain[] =
+    useQuery(
+      api.customDomains.listForSite,
+      selectedSiteId
+        ? ({
+            siteId: selectedSiteId as any,
+          } as any)
+        : "skip"
+    ) ?? [];
+
   const createSite = useMutation(api.sites.create);
   const updateSite = useMutation(api.sites.update);
   const deleteSite = useMutation(api.sites.remove);
   const generateUploadUrl = useMutation(api.sites.generateUploadUrl);
+
+  const createCustomDomain = useAction(api.customDomains.createForSite);
+  const refreshCustomDomain = useAction(api.customDomains.refreshStatus);
+  const deleteCustomDomain = useAction(api.customDomains.removeFromProject);
 
   const [form, setForm] = useState<SiteFormState>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -58,11 +80,13 @@ export default function SiteManagerPage() {
       faviconStorageId: site.faviconStorageId,
       faviconUrl: site.faviconUrl,
     });
+    setSelectedSiteId(site._id as any);
     setIsFormOpen(true);
   };
 
   const handleNewSite = () => {
     setForm(EMPTY_FORM);
+    setSelectedSiteId(undefined);
     setIsFormOpen(true);
   };
 
@@ -96,7 +120,8 @@ export default function SiteManagerPage() {
           ...payload,
         });
       } else {
-        await createSite(payload);
+        const id = await createSite(payload);
+        setSelectedSiteId(id as any);
       }
 
       setForm(EMPTY_FORM);
@@ -115,10 +140,101 @@ export default function SiteManagerPage() {
       await deleteSite({ id: id as any });
       if (form.id === id) {
         setForm(EMPTY_FORM);
+        setSelectedSiteId(undefined);
         setIsFormOpen(false);
       }
     } catch (e: any) {
       setError(e?.message ?? "Failed to delete site.");
+    }
+  };
+
+  const handleAddCustomDomain = async () => {
+    if (!form.id) {
+      setError("Please save the site before adding a custom domain.");
+      return;
+    }
+
+    const rawDomain = window.prompt(
+      'Enter the custom domain (e.g. "kooft.com", without protocol):'
+    );
+    if (!rawDomain) return;
+
+    const normalizedInput = rawDomain.trim().toLowerCase();
+
+    // Basic normalization similar to what happens on the backend.
+    let hostname = normalizedInput.replace(/^https?:\/\//, "");
+    const slashIndex = hostname.indexOf("/");
+    if (slashIndex !== -1) {
+      hostname = hostname.slice(0, slashIndex);
+    }
+    if (hostname.endsWith(".")) {
+      hostname = hostname.slice(0, -1);
+    }
+
+    const labels = hostname.split(".").filter(Boolean);
+    const isApexDomain = labels.length === 2 && !hostname.startsWith("www.");
+
+    let alsoRedirectWww = false;
+    if (isApexDomain) {
+      alsoRedirectWww = window.confirm(
+        `Also configure "www.${hostname}" to redirect to "${hostname}"?`
+      );
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      await createCustomDomain({
+        siteId: form.id as any,
+        domain: rawDomain,
+        redirectFromWww: alsoRedirectWww,
+      });
+    } catch (e: any) {
+      setError(
+        e?.message ??
+          "Something went wrong while creating the custom domain in Vercel."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRefreshDomainStatus = async (domainId: string) => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await refreshCustomDomain({ id: domainId as any });
+    } catch (e: any) {
+      setError(
+        e?.message ??
+          "Something went wrong while refreshing the custom domain status."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteDomain = async (domainId: string, domainName: string) => {
+    if (
+      !window.confirm(
+        `Remove custom domain "${domainName}"? This will also attempt to detach it from the Vercel project.`
+      )
+    ) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await deleteCustomDomain({ id: domainId as any });
+    } catch (e: any) {
+      setError(
+        e?.message ??
+          "Something went wrong while removing the custom domain from Vercel."
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -520,6 +636,147 @@ export default function SiteManagerPage() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-xs font-medium text-slate-200">
+                        Custom domains
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Connect custom domains like{" "}
+                        <span className="font-mono text-slate-200">
+                          kooft.com
+                        </span>{" "}
+                        and manage DNS, redirects and status.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSubmitting || !form.id}
+                      onClick={handleAddCustomDomain}
+                      className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-slate-100 hover:border-sky-500 hover:text-sky-200 disabled:opacity-50"
+                    >
+                      + Add domain
+                    </button>
+                  </div>
+
+                  {!form.id ? (
+                    <p className="text-[11px] text-slate-500">
+                      Save the site first, then you can connect a custom domain.
+                    </p>
+                  ) : customDomains.length === 0 ? (
+                    <p className="text-[11px] text-slate-500">
+                      No custom domains connected yet.
+                    </p>
+                  ) : (
+                    <div className="mt-1 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60">
+                      <table className="min-w-full divide-y divide-slate-800 text-[11px]">
+                        <thead className="bg-slate-900/80 text-[10px] uppercase tracking-wide text-slate-400">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Domain</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                            <th className="px-3 py-2 text-left">
+                              DNS instructions
+                            </th>
+                            <th className="px-3 py-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/80">
+                          {customDomains.map((domain) => (
+                            <tr key={domain._id} className="bg-slate-950/60">
+                              <td className="px-3 py-2 align-top font-mono text-slate-100">
+                                {domain.domain}
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] ${
+                                    domain.status === "active"
+                                      ? "bg-emerald-500/10 text-emerald-300"
+                                      : domain.status === "error"
+                                      ? "bg-red-500/10 text-red-300"
+                                      : "bg-amber-500/10 text-amber-200"
+                                  }`}
+                                >
+                                  {domain.status}
+                                </span>
+                                {domain.redirectFromWww && (
+                                  <div className="mt-1 text-[9px] text-slate-400">
+                                    Redirects{" "}
+                                    <span className="font-mono text-slate-200">
+                                      www
+                                    </span>{" "}
+                                    to apex.
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                {domain.verificationType &&
+                                domain.verificationName &&
+                                domain.verificationValue ? (
+                                  <div className="rounded-md bg-slate-950/80 p-1.5 text-[10px] text-slate-300">
+                                    <p className="mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
+                                      DNS record to configure
+                                    </p>
+                                    <p>
+                                      <span className="font-mono text-slate-200">
+                                        {domain.verificationType}
+                                      </span>{" "}
+                                      <span className="font-mono text-slate-200">
+                                        {domain.verificationName}
+                                      </span>{" "}
+                                      <span className="font-mono text-slate-200">
+                                        {domain.verificationValue}
+                                      </span>
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500">
+                                    No DNS instructions available yet.
+                                  </span>
+                                )}
+                                {domain.error && (
+                                  <p className="mt-1 text-[10px] text-red-300">
+                                    {domain.error}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 align-top text-right">
+                                <div className="flex flex-col items-end gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={() =>
+                                      handleRefreshDomainStatus(
+                                        domain._id as any
+                                      )
+                                    }
+                                    className="rounded-full border border-slate-700 bg-slate-900 px-2.5 py-0.5 text-[10px] text-slate-200 hover:border-sky-500 hover:text-sky-200 disabled:opacity-50"
+                                  >
+                                    Refresh
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isSubmitting}
+                                    onClick={() =>
+                                      handleDeleteDomain(
+                                        domain._id as any,
+                                        domain.domain
+                                      )
+                                    }
+                                    className="rounded-full border border-transparent bg-red-500/10 px-2.5 py-0.5 text-[10px] font-medium text-red-300 hover:bg-red-500/20 disabled:opacity-50"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-2 flex items-center justify-between gap-3 border-t border-slate-800 pt-4">

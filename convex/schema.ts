@@ -13,6 +13,22 @@ const schema = defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_subdomain", ["subdomain"]),
+
+  customDomains: defineTable({
+    siteId: v.id("sites"),
+    domain: v.string(), // e.g. "kooft.com" or "www.kooft.com"
+    redirectFromWww: v.boolean(), // true when this domain should redirect "www." to the apex
+    status: v.string(), // "pending" | "active" | "error"
+    verificationType: v.optional(v.string()), // e.g. "CNAME" | "TXT"
+    verificationName: v.optional(v.string()), // DNS record name/host
+    verificationValue: v.optional(v.string()), // DNS record value/target
+    vercelDomainId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_site", ["siteId"])
+    .index("by_domain", ["domain"]),
 });
 
 export default schema;

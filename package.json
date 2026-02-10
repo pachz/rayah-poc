@@ -12,6 +12,7 @@
     "convex:dev": "convex dev"
   },
   "dependencies": {
+    "@vercel/sdk": "^1.19.1",
     "convex": "^1.31.7",
     "next": "16.1.6",
     "react": "19.2.3",
