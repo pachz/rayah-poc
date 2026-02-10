@@ -14,10 +14,14 @@ function getWildcardDomains(): string[] {
   const raw = process.env.WILDCARD_DOMAINS;
   if (!raw) return [];
 
-  return raw
+  const domains = raw
     .split(",")
     .map((d) => d.trim().toLowerCase())
     .filter(Boolean);
+
+  console.log("[page#getWildcardDomains] Parsed wildcard domains:", domains);
+
+  return domains;
 }
 
 function getSubdomainFromHost(hostname: string): string | null {
@@ -26,21 +30,56 @@ function getSubdomainFromHost(hostname: string): string | null {
 
   const host = hostname.toLowerCase();
 
-  const matchedRoot = wildcardDomains.find(
-    (domain) => host === domain || host.endsWith(`.${domain}`)
-  );
+  console.log("[page#getSubdomainFromHost] Incoming hostname:", hostname);
 
-  if (!matchedRoot) return null;
+  const matchedRoot = wildcardDomains.find((domain) => {
+    const matches = host === domain || host.endsWith(`.${domain}`);
+    if (matches) {
+      console.log(
+        "[page#getSubdomainFromHost] Matched root domain:",
+        domain,
+        "for host:",
+        host
+      );
+    }
+    return matches;
+  });
+
+  if (!matchedRoot) {
+    console.log(
+      "[page#getSubdomainFromHost] No wildcard domain matched for host:",
+      host
+    );
+    return null;
+  }
 
   if (host === matchedRoot) {
+    console.log(
+      "[page#getSubdomainFromHost] Host equals matched root, no subdomain:",
+      host
+    );
     return null;
   }
 
   const subdomainPart = host.slice(0, -(matchedRoot.length + 1));
-  if (!subdomainPart) return null;
+  if (!subdomainPart) {
+    console.log(
+      "[page#getSubdomainFromHost] Empty subdomain part for host:",
+      host
+    );
+    return null;
+  }
 
   const [subdomain] = subdomainPart.split(".");
-  if (!subdomain) return null;
+  if (!subdomain) {
+    console.log(
+      "[page#getSubdomainFromHost] Failed to extract subdomain from part:",
+      subdomainPart
+    );
+    return null;
+  }
+
+  console.log("[page#getSubdomainFromHost] Resolved subdomain:", subdomain);
 
   return subdomain;
 }
@@ -50,6 +89,7 @@ async function getSiteForRequest(): Promise<SiteConfig | null> {
   const hostHeader = headerStore.get("host");
 
   if (!hostHeader) {
+    console.log("[page#getSiteForRequest] Missing host header");
     return null;
   }
 
@@ -57,17 +97,26 @@ async function getSiteForRequest(): Promise<SiteConfig | null> {
   const subdomain = getSubdomainFromHost(hostname);
 
   if (!subdomain) {
+    console.log(
+      "[page#getSiteForRequest] No subdomain resolved for hostname:",
+      hostname
+    );
     return null;
   }
 
   const convexBaseUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
   if (!convexBaseUrl) {
+    console.log(
+      "[page#getSiteForRequest] Missing NEXT_PUBLIC_CONVEX_URL env var"
+    );
     return null;
   }
 
   const url = `${convexBaseUrl.replace(/\/+$/, "")}/${encodeURIComponent(
     subdomain
   )}`;
+
+  console.log("[page#getSiteForRequest] Fetching site config from:", url);
 
   try {
     const res = await fetch(url, {
@@ -77,18 +126,35 @@ async function getSiteForRequest(): Promise<SiteConfig | null> {
     });
 
     if (!res.ok) {
+      console.log(
+        "[page#getSiteForRequest] Convex request failed:",
+        res.status,
+        res.statusText
+      );
       return null;
     }
 
     const data = (await res.json()) as SiteConfig;
+
+    console.log("[page#getSiteForRequest] Received site config:", data);
+
     return data;
-  } catch {
+  } catch (error) {
+    console.log("[page#getSiteForRequest] Error fetching site config:", error);
     return null;
   }
 }
 
 export default async function Home() {
   const site = await getSiteForRequest();
+
+  if (!site) {
+    console.log(
+      "[page#Home] No site config resolved, falling back to default content"
+    );
+  } else {
+    console.log("[page#Home] Rendering site with config:", site);
+  }
 
   const title = site?.title ?? "Lorem Ipsum Dolor Sit Amet";
   const description =
