@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import type { CSSProperties } from "react";
 
@@ -144,6 +145,25 @@ async function getSiteForRequest(): Promise<SiteConfig | null> {
     console.log("[page#getSiteForRequest] Error fetching site config:", error);
     return null;
   }
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await getSiteForRequest();
+
+  const title = site?.title ?? "Lorem Ipsum Dolor Sit Amet";
+  const description =
+    site?.description ??
+    "Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.";
+
+  return {
+    title,
+    description,
+    icons: site?.faviconUrl
+      ? {
+          icon: site.faviconUrl,
+        }
+      : undefined,
+  };
 }
 
 export default async function Home() {
