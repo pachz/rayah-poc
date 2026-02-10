@@ -30,6 +30,29 @@ export async function generateMetadata(): Promise<Metadata> {
           icon: site.faviconUrl,
         }
       : undefined,
+    openGraph: {
+      title,
+      description,
+      ...(site?.faviconUrl
+        ? {
+            images: [
+              {
+                url: site.faviconUrl,
+              },
+            ],
+          }
+        : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      ...(site?.faviconUrl
+        ? {
+            images: [site.faviconUrl],
+          }
+        : {}),
+    },
   };
 }
 
