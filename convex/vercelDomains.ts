@@ -87,47 +87,11 @@ export function normalizeDomain(raw: string): string {
     );
   }
 
-  // For now we only support apex domains (e.g. "example.com"), not
-  // nested subdomains like "test.example.com". Vercel's
-  // "add existing domain" endpoint expects an apex.
-  const labels = domain.split(".").filter(Boolean);
-  if (labels.length > 2) {
-    throw new Error(
-      'Only apex domains are supported right now (e.g. "example.com", not "test.example.com").'
-    );
-  }
-
   if (domain.endsWith(".")) {
     domain = domain.slice(0, -1);
   }
 
   return domain;
-}
-
-export async function addDomain(
-  name: string
-): Promise<VercelDomainResponse> {
-  const result = await callVercel<{ domain: VercelDomainResponse }>(
-    "/v7/domains",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        // Use the "add" method with cdnEnabled to ensure
-        // we match exactly one schema in the Vercel API.
-        method: "add",
-        cdnEnabled: true,
-      }),
-    }
-  );
-
-  if (!result.ok) {
-    throw new Error(
-      `Failed to add domain "${name}" in Vercel: ${result.errorMessage}`
-    );
-  }
-
-  return result.data.domain;
 }
 
 export async function getDomainConfig(

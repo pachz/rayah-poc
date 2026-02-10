@@ -1,13 +1,7 @@
 import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
-import {
-  addDomain,
-  deleteDomain,
-  deriveDnsInstruction,
-  getDomainConfig,
-  normalizeDomain,
-} from "./vercelDomains";
+import { deleteDomain, deriveDnsInstruction, getDomainConfig, normalizeDomain } from "./vercelDomains";
 
 export const listForSite = query({
   args: {
@@ -101,7 +95,6 @@ export const createForSite = action({
   handler: async (ctx, args): Promise<{ apexId: string; wwwId: string | null }> => {
     const apexDomain = normalizeDomain(args.domain);
 
-    const apexResult = await addDomain(apexDomain);
     const apexConfig = await getDomainConfig(apexDomain);
     const apexDns = deriveDnsInstruction(apexDomain, apexConfig);
 
@@ -110,7 +103,7 @@ export const createForSite = action({
       domain: apexDomain,
       redirectFromWww: args.redirectFromWww,
       status: apexDns.status,
-      vercelDomainId: apexResult.id,
+      vercelDomainId: undefined,
       verificationType: apexDns.verificationType,
       verificationName: apexDns.verificationName,
       verificationValue: apexDns.verificationValue,
@@ -123,53 +116,20 @@ export const createForSite = action({
     if (args.redirectFromWww) {
       const wwwDomain = `www.${apexDomain}`;
 
-      let wwwResultOk = true;
-      try {
-        await addDomain(wwwDomain);
-      } catch (error: any) {
-        wwwResultOk = false;
-      }
+      const wwwConfig = await getDomainConfig(wwwDomain);
+      const wwwDns = deriveDnsInstruction(wwwDomain, wwwConfig);
 
-      if (!wwwResultOk) {
-        // Do not rollback apex; just record an error for the www domain.
-        const message = `Failed to configure www redirect for "${apexDomain}".`;
-
-        // DNS info may still be available.
-        let wwwDns: ReturnType<typeof deriveDnsInstruction> | undefined;
-        try {
-          const wwwConfig = await getDomainConfig(wwwDomain);
-          wwwDns = deriveDnsInstruction(wwwDomain, wwwConfig);
-        } catch {
-          // ignore
-        }
-
-        wwwId = await ctx.runMutation(api.customDomains.insert, {
-          siteId: args.siteId,
-          domain: wwwDomain,
-          redirectFromWww: true,
-          status: "error",
-          vercelDomainId: undefined,
-          verificationType: wwwDns?.verificationType,
-          verificationName: wwwDns?.verificationName,
-          verificationValue: wwwDns?.verificationValue,
-          error: message,
-        });
-      } else {
-        const wwwConfig = await getDomainConfig(wwwDomain);
-        const wwwDns = deriveDnsInstruction(wwwDomain, wwwConfig);
-
-        wwwId = await ctx.runMutation(api.customDomains.insert, {
-          siteId: args.siteId,
-          domain: wwwDomain,
-          redirectFromWww: true,
-          status: wwwDns.status,
-          vercelDomainId: undefined,
-          verificationType: wwwDns.verificationType,
-          verificationName: wwwDns.verificationName,
-          verificationValue: wwwDns.verificationValue,
-          error: undefined,
-        });
-      }
+      wwwId = await ctx.runMutation(api.customDomains.insert, {
+        siteId: args.siteId,
+        domain: wwwDomain,
+        redirectFromWww: true,
+        status: wwwDns.status,
+        vercelDomainId: undefined,
+        verificationType: wwwDns.verificationType,
+        verificationName: wwwDns.verificationName,
+        verificationValue: wwwDns.verificationValue,
+        error: undefined,
+      });
     }
 
     return {
