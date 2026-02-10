@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import type { CSSProperties } from "react";
 
 type SiteConfig = {
   name: string;
@@ -161,8 +162,19 @@ export default async function Home() {
     site?.description ??
     "Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.";
 
+  const primaryColor = site?.primaryColor ?? "#2563eb";
+  const secondaryColor = site?.secondaryColor ?? "#7c3aed";
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div
+      className="min-h-screen bg-background text-foreground"
+      style={
+        {
+          "--primary": primaryColor,
+          "--secondary": secondaryColor,
+        } as CSSProperties
+      }
+    >
       <main className="mx-auto max-w-2xl px-6 py-16">
         <h1 className="mb-4 text-4xl font-bold tracking-tight">{title}</h1>
         <p className="mb-12 text-lg text-foreground/80">{description}</p>
