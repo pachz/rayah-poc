@@ -8,6 +8,11 @@ function normalizeAndValidateSubdomain(raw: string): string {
     throw new Error("Subdomain is required.");
   }
 
+  const reserved = new Set(["admin", "www"]);
+  if (reserved.has(subdomain)) {
+    throw new Error(`The subdomain "${subdomain}" is reserved.`);
+  }
+
   if (subdomain.length < 3 || subdomain.length > 63) {
     throw new Error("Subdomain must be between 3 and 63 characters.");
   }
