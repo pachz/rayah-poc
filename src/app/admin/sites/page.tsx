@@ -381,7 +381,7 @@ export default function SiteManagerPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-300">
-                          {site.subdomain}.yourdomain.com
+                          {site.subdomain}.borj.pro
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
@@ -504,7 +504,7 @@ export default function SiteManagerPage() {
                         placeholder="my-site"
                       />
                       <span className="truncate text-xs text-slate-500">
-                        .yourdomain.com
+                        .borj.pro
                       </span>
                     </div>
                   </FormField>
