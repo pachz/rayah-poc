@@ -1,6 +1,98 @@
-export default function Home() {
-  const title = "Lorem Ipsum Dolor Sit Amet";
+import { headers } from "next/headers";
+
+type SiteConfig = {
+  name: string;
+  subdomain: string;
+  title: string;
+  description: string;
+  primaryColor: string;
+  secondaryColor: string;
+  faviconUrl: string | null;
+};
+
+function getWildcardDomains(): string[] {
+  const raw = process.env.WILDCARD_DOMAINS;
+  if (!raw) return [];
+
+  return raw
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function getSubdomainFromHost(hostname: string): string | null {
+  const wildcardDomains = getWildcardDomains();
+  if (wildcardDomains.length === 0) return null;
+
+  const host = hostname.toLowerCase();
+
+  const matchedRoot = wildcardDomains.find(
+    (domain) => host === domain || host.endsWith(`.${domain}`)
+  );
+
+  if (!matchedRoot) return null;
+
+  if (host === matchedRoot) {
+    return null;
+  }
+
+  const subdomainPart = host.slice(0, -(matchedRoot.length + 1));
+  if (!subdomainPart) return null;
+
+  const [subdomain] = subdomainPart.split(".");
+  if (!subdomain) return null;
+
+  return subdomain;
+}
+
+async function getSiteForRequest(): Promise<SiteConfig | null> {
+  const headerStore = await headers();
+  const hostHeader = headerStore.get("host");
+
+  if (!hostHeader) {
+    return null;
+  }
+
+  const hostname = hostHeader.split(":")[0] ?? "";
+  const subdomain = getSubdomainFromHost(hostname);
+
+  if (!subdomain) {
+    return null;
+  }
+
+  const convexBaseUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  if (!convexBaseUrl) {
+    return null;
+  }
+
+  const url = `${convexBaseUrl.replace(/\/+$/, "")}/${encodeURIComponent(
+    subdomain
+  )}`;
+
+  try {
+    const res = await fetch(url, {
+      // Cache Convex responses per subdomain with ISR-style revalidation.
+      cache: "force-cache",
+      next: { revalidate: 60, tags: ["site", `site:${subdomain}`] },
+    });
+
+    if (!res.ok) {
+      return null;
+    }
+
+    const data = (await res.json()) as SiteConfig;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export default async function Home() {
+  const site = await getSiteForRequest();
+
+  const title = site?.title ?? "Lorem Ipsum Dolor Sit Amet";
   const description =
+    site?.description ??
     "Consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.";
 
   return (
