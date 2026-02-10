@@ -62,6 +62,54 @@ const getSiteBySubdomain = httpAction(async (ctx, request) => {
   });
 });
 
+const getSiteByDomain = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const rawDomain = url.searchParams.get("domain") ?? "";
+  const domain = rawDomain.trim().toLowerCase();
+
+  if (!domain) {
+    return new Response(
+      JSON.stringify({
+        error: "Domain is required",
+      }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  const site = await ctx.runQuery(api.customDomains.getSiteByDomain, {
+    domain,
+  });
+
+  if (!site) {
+    return new Response(
+      JSON.stringify({
+        error: "Site not found for domain",
+      }),
+      {
+        status: 404,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
+  }
+
+  return new Response(JSON.stringify(site), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+});
+
 const http = httpRouter();
 
 http.route({
@@ -70,6 +118,12 @@ http.route({
   pathPrefix: "/",
   method: "GET",
   handler: getSiteBySubdomain,
+});
+
+http.route({
+  path: "/by-domain",
+  method: "GET",
+  handler: getSiteByDomain,
 });
 
 export default http;

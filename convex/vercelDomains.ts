@@ -24,6 +24,7 @@ export type DnsInstruction = {
 const token = process.env.VERCEL_ACCESS_TOKEN;
 const teamId = process.env.VERCEL_TEAM_ID;
 const teamSlug = process.env.VERCEL_TEAM_SLUG;
+const projectId = process.env.VERCEL_PROJECT_ID;
 
 async function callVercel<T>(
   path: string,
@@ -92,6 +93,37 @@ export function normalizeDomain(raw: string): string {
   }
 
   return domain;
+}
+
+export async function addDomainToProject(name: string, redirect?: string) {
+  if (!projectId) {
+    throw new Error(
+      "Missing Vercel configuration. Please set VERCEL_PROJECT_ID in Convex environment variables."
+    );
+  }
+
+  const result = await callVercel<unknown>(
+    `/v10/projects/${encodeURIComponent(projectId)}/domains`,
+    {
+      method: "POST",
+      body: JSON.stringify(
+        redirect
+          ? {
+              name,
+              redirect,
+            }
+          : {
+              name,
+            }
+      ),
+    }
+  );
+
+  if (!result.ok) {
+    throw new Error(
+      `Failed to attach domain "${name}" to Vercel project: ${result.errorMessage}`
+    );
+  }
 }
 
 export async function getDomainConfig(

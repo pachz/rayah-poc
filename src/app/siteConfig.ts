@@ -84,6 +84,54 @@ function getSubdomainFromHost(hostname: string): string | null {
   return subdomain;
 }
 
+async function fetchSiteConfigFromConvex(
+  path: string,
+  cacheTag: string
+): Promise<SiteConfig | null> {
+  const convexBaseUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+  if (!convexBaseUrl) {
+    console.log(
+      "[siteConfig#fetchSiteConfigFromConvex] Missing NEXT_PUBLIC_CONVEX_SITE_URL env var"
+    );
+    return null;
+  }
+
+  const url = `${convexBaseUrl.replace(/\/+$/, "")}${path}`;
+
+  console.log("[siteConfig#fetchSiteConfigFromConvex] Fetching site config from:", url);
+
+  try {
+    const res = await fetch(url, {
+      cache: "force-cache",
+      next: { revalidate: 120, tags: ["site", cacheTag] },
+    });
+
+    if (!res.ok) {
+      console.log(
+        "[siteConfig#fetchSiteConfigFromConvex] Convex request failed:",
+        res.status,
+        res.statusText
+      );
+      return null;
+    }
+
+    const data = (await res.json()) as SiteConfig;
+
+    console.log(
+      "[siteConfig#fetchSiteConfigFromConvex] Received site config:",
+      data
+    );
+
+    return data;
+  } catch (error) {
+    console.log(
+      "[siteConfig#fetchSiteConfigFromConvex] Error fetching site config:",
+      error
+    );
+    return null;
+  }
+}
+
 export async function getSiteForRequest(): Promise<SiteConfig | null> {
   const headerStore = await headers();
   const hostHeader = headerStore.get("host");
@@ -96,54 +144,23 @@ export async function getSiteForRequest(): Promise<SiteConfig | null> {
   const hostname = hostHeader.split(":")[0] ?? "";
   const subdomain = getSubdomainFromHost(hostname);
 
-  if (!subdomain) {
-    console.log(
-      "[siteConfig#getSiteForRequest] No subdomain resolved for hostname:",
-      hostname
+  // 1) If host matches a wildcard domain, resolve via subdomain.
+  if (subdomain) {
+    return fetchSiteConfigFromConvex(
+      `/${encodeURIComponent(subdomain)}`,
+      `site:${subdomain}`
     );
-    return null;
   }
 
-  const convexBaseUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
-  if (!convexBaseUrl) {
-    console.log(
-      "[siteConfig#getSiteForRequest] Missing NEXT_PUBLIC_CONVEX_SITE_URL env var"
-    );
-    return null;
-  }
+  // 2) Otherwise, try resolving via custom domain mapping.
+  console.log(
+    "[siteConfig#getSiteForRequest] No wildcard subdomain, trying custom domain for host:",
+    hostname
+  );
 
-  const url = `${convexBaseUrl.replace(/\/+$/, "")}/${encodeURIComponent(
-    subdomain
-  )}`;
-
-  console.log("[siteConfig#getSiteForRequest] Fetching site config from:", url);
-
-  try {
-    const res = await fetch(url, {
-      cache: "force-cache",
-      next: { revalidate: 120, tags: ["site", `site:${subdomain}`] },
-    });
-
-    if (!res.ok) {
-      console.log(
-        "[siteConfig#getSiteForRequest] Convex request failed:",
-        res.status,
-        res.statusText
-      );
-      return null;
-    }
-
-    const data = (await res.json()) as SiteConfig;
-
-    console.log("[siteConfig#getSiteForRequest] Received site config:", data);
-
-    return data;
-  } catch (error) {
-    console.log(
-      "[siteConfig#getSiteForRequest] Error fetching site config:",
-      error
-    );
-    return null;
-  }
+  return fetchSiteConfigFromConvex(
+    `/by-domain?domain=${encodeURIComponent(hostname.toLowerCase())}`,
+    `site:domain:${hostname.toLowerCase()}`
+  );
 }
 

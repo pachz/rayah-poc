@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 import { action, mutation, query } from "./_generated/server";
 import { api } from "./_generated/api";
-import { deleteDomain, deriveDnsInstruction, getDomainConfig, normalizeDomain } from "./vercelDomains";
+import {
+  addDomainToProject,
+  deleteDomain,
+  deriveDnsInstruction,
+  getDomainConfig,
+  normalizeDomain,
+} from "./vercelDomains";
 
 export const listForSite = query({
   args: {
@@ -13,6 +19,47 @@ export const listForSite = query({
       .withIndex("by_site", (q) => q.eq("siteId", args.siteId))
       .order("desc")
       .collect();
+  },
+});
+
+export const getSiteByDomain = query({
+  args: {
+    domain: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const domain = args.domain.trim().toLowerCase();
+
+    if (!domain) {
+      return null;
+    }
+
+    const record = await ctx.db
+      .query("customDomains")
+      .withIndex("by_domain", (q) => q.eq("domain", domain))
+      .first();
+
+    if (!record) {
+      return null;
+    }
+
+    const site = await ctx.db.get(record.siteId);
+    if (!site) {
+      return null;
+    }
+
+    const faviconUrl = site.faviconStorageId
+      ? await ctx.storage.getUrl(site.faviconStorageId)
+      : null;
+
+    return {
+      name: site.name,
+      subdomain: site.subdomain,
+      title: site.title,
+      description: site.description,
+      primaryColor: site.primaryColor,
+      secondaryColor: site.secondaryColor,
+      faviconUrl,
+    };
   },
 });
 
@@ -95,6 +142,10 @@ export const createForSite = action({
   handler: async (ctx, args): Promise<{ apexId: string; wwwId: string | null }> => {
     const apexDomain = normalizeDomain(args.domain);
 
+    // 1) Attach the primary domain to the Vercel project.
+    await addDomainToProject(apexDomain);
+
+    // 2) Fetch DNS configuration for the primary domain.
     const apexConfig = await getDomainConfig(apexDomain);
     const apexDns = deriveDnsInstruction(apexDomain, apexConfig);
 
@@ -112,9 +163,12 @@ export const createForSite = action({
 
     let wwwId: string | null = null;
 
-    // 2) Optionally configure www.<domain> to redirect to the apex.
+    // 3) Optionally configure www.<domain> to redirect to the apex.
     if (args.redirectFromWww) {
       const wwwDomain = `www.${apexDomain}`;
+
+      // Attach www.<domain> to the same project as a redirect.
+      await addDomainToProject(wwwDomain, apexDomain);
 
       const wwwConfig = await getDomainConfig(wwwDomain);
       const wwwDns = deriveDnsInstruction(wwwDomain, wwwConfig);
