@@ -147,21 +147,36 @@ export function deriveDnsInstruction(
   domain: string,
   config: VercelDomainConfigResponse
 ): DnsInstruction {
-  const apexRecommendedCname = config.recommendedCNAME?.[0];
-  const apexRecommendedIpv4 = config.recommendedIPv4?.[0];
+  const recommendedCname = config.recommendedCNAME?.[0];
+  const recommendedIpv4 = config.recommendedIPv4?.[0];
 
   let verificationType: string | undefined;
   let verificationName: string | undefined;
   let verificationValue: string | undefined;
 
-  if (apexRecommendedCname) {
-    verificationType = "CNAME";
-    verificationName = domain;
-    verificationValue = apexRecommendedCname.value;
-  } else if (apexRecommendedIpv4 && apexRecommendedIpv4.value?.length) {
+  // Heuristic: apex domains (two labels, e.g. "borj.info") should use A,
+  // since many DNS providers don't allow CNAME at the zone apex. Subdomains
+  // (three or more labels) can prefer CNAME.
+  const labels = domain.split(".").filter(Boolean);
+  const isApex = labels.length === 2;
+
+  if (isApex && recommendedIpv4 && recommendedIpv4.value?.length) {
     verificationType = "A";
     verificationName = domain;
-    verificationValue = apexRecommendedIpv4.value[0];
+    verificationValue = recommendedIpv4.value[0];
+  } else if (!isApex && recommendedCname) {
+    verificationType = "CNAME";
+    verificationName = domain;
+    verificationValue = recommendedCname.value;
+  } else if (recommendedIpv4 && recommendedIpv4.value?.length) {
+    // Fallback to A if we couldn't use CNAME.
+    verificationType = "A";
+    verificationName = domain;
+    verificationValue = recommendedIpv4.value[0];
+  } else if (recommendedCname) {
+    verificationType = "CNAME";
+    verificationName = domain;
+    verificationValue = recommendedCname.value;
   }
 
   const status: "active" | "pending" = config.misconfigured
