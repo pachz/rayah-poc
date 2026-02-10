@@ -104,10 +104,10 @@ async function getSiteForRequest(): Promise<SiteConfig | null> {
     return null;
   }
 
-  const convexBaseUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+  const convexBaseUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
   if (!convexBaseUrl) {
     console.log(
-      "[page#getSiteForRequest] Missing NEXT_PUBLIC_CONVEX_URL env var"
+      "[page#getSiteForRequest] Missing NEXT_PUBLIC_CONVEX_SITE_URL env var"
     );
     return null;
   }

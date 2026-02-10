@@ -65,7 +65,9 @@ const getSiteBySubdomain = httpAction(async (ctx, request) => {
 const http = httpRouter();
 
 http.route({
-  path: "/:subdomain",
+  // Match all GET requests under `/` and let the handler
+  // extract the subdomain from the path manually.
+  pathPrefix: "/",
   method: "GET",
   handler: getSiteBySubdomain,
 });
